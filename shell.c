@@ -7,67 +7,100 @@
 
 extern char **environ;
 
+#define MAX_ARGS 64
+
+/* Trim leading and trailing spaces/tabs */
 void trim_spaces(char *str)
 {
-    char *start = str;
+    char *start;
     char *end;
+    size_t len;
+
+    start = str;
     while (*start == ' ' || *start == '\t')
         start++;
+
     if (*start == '\0')
     {
         str[0] = '\0';
         return;
     }
+
     end = start + strlen(start) - 1;
     while (end > start && (*end == ' ' || *end == '\t'))
         *end-- = '\0';
+
     if (start != str)
-        memmove(str, start, strlen(start) + 1);
+    {
+        len = strlen(start);
+        memmove(str, start, len + 1);
+    }
 }
 
+/* Search command in PATH */
 char *get_command_path(char *cmd)
 {
     char *path_env;
     char *paths;
-    char *dir;
-    static char full_path[1024];
+    char *token;
+    char *cmd_path;
+    size_t cmd_len;
+    size_t path_len;
 
-    if (cmd[0] == '/' || cmd[0] == '.')
+    if (strchr(cmd, '/')) /* If command contains /, try as is */
         return cmd;
 
     path_env = getenv("PATH");
-    if (!path_env)
+    if (!path_env || path_env[0] == '\0') /* Empty PATH */
         return cmd;
 
     paths = strdup(path_env);
-    dir = strtok(paths, ":");
+    if (!paths)
+        return cmd;
 
-    while (dir)
+    token = strtok(paths, ":");
+    while (token)
     {
-        snprintf(full_path, sizeof(full_path), "%s/%s", dir, cmd);
-        if (access(full_path, X_OK) == 0)
+        cmd_len = strlen(cmd);
+        path_len = strlen(token);
+        cmd_path = malloc(cmd_len + path_len + 2);
+        if (!cmd_path)
         {
             free(paths);
-            return full_path;
+            return cmd;
         }
-        dir = strtok(NULL, ":");
+        strcpy(cmd_path, token);
+        strcat(cmd_path, "/");
+        strcat(cmd_path, cmd);
+
+        if (access(cmd_path, X_OK) == 0)
+        {
+            free(paths);
+            return cmd_path; /* Found executable */
+        }
+
+        free(cmd_path);
+        token = strtok(NULL, ":");
     }
 
     free(paths);
-    return cmd;
+    return cmd; /* Not found */
 }
 
 int main(void)
 {
-    char *line = NULL;
-    size_t len = 0;
+    char *line;
+    size_t len;
     ssize_t read_len;
     pid_t pid;
     int interactive;
-    char *argv[64];
-    int argc;
-    char *token;
-    char *cmd_path;
+    char *argv[MAX_ARGS];
+    int i;
+    int status;
+    int line_number = 1;
+
+    line = NULL;
+    len = 0;
 
     while (1)
     {
@@ -89,7 +122,19 @@ int main(void)
 
         trim_spaces(line);
         if (line[0] == '\0')
+        {
+            line_number++;
             continue;
+        }
+
+        /* Split line into argv */
+        i = 0;
+        argv[i] = strtok(line, " ");
+        while (argv[i] && i < MAX_ARGS - 1)
+        {
+            i++;
+            argv[i] = strtok(NULL, " ");
+        }
 
         pid = fork();
         if (pid < 0)
@@ -98,26 +143,31 @@ int main(void)
             free(line);
             exit(1);
         }
-        else if (pid == 0)
+        else if (pid == 0) /* Child */
         {
-            argc = 0;
-            token = strtok(line, " ");
-            while (token && argc < 63)
-            {
-                argv[argc++] = token;
-                token = strtok(NULL, " ");
-            }
-            argv[argc] = NULL;
+            char *cmd_path;
 
             cmd_path = get_command_path(argv[0]);
-            if (execve(cmd_path, argv, environ) == -1)
+            execve(cmd_path, argv, environ);
+
+            /* If execve fails, print exact expected message */
+            write(2, "./hsh: ", 7);
             {
-                write(2, "./simple_shell: No such file or directory\n", 43);
-                exit(1);
+                char numbuf[12];
+                int n = snprintf(numbuf, sizeof(numbuf), "%d", line_number);
+                write(2, numbuf, n);
             }
+            write(2, ": ", 2);
+            write(2, argv[0], strlen(argv[0]));
+            write(2, ": not found\n", 12);
+            exit(127);
         }
-        else
-            wait(NULL);
+        else /* Parent */
+        {
+            wait(&status);
+        }
+
+        line_number++;
     }
 
     free(line);
