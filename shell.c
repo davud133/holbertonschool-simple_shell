@@ -150,7 +150,7 @@ int main(void)
             cmd_path = get_command_path(argv[0]);
             execve(cmd_path, argv, environ);
 
-            /* If execve fails, print exact expected message */
+            /* Command not found: exact message */
             write(2, "./hsh: ", 7);
             {
                 char numbuf[12];
@@ -160,7 +160,7 @@ int main(void)
             write(2, ": ", 2);
             write(2, argv[0], strlen(argv[0]));
             write(2, ": not found\n", 12);
-            exit(127);
+            exit(127); /* MUST return 127 for command not found */
         }
         else /* Parent */
         {
