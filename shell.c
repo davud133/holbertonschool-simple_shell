@@ -7,17 +7,22 @@
 
 extern char **environ;
 
-char *trim_spaces(char *str)
+void trim_spaces(char *str)
 {
+    char *start = str;
     char *end;
-    while (*str == ' ' || *str == '\t')
-        str++;
-    if (*str == '\0')
-        return str;
-    end = str + strlen(str) - 1;
-    while (end > str && (*end == ' ' || *end == '\t'))
+    while (*start == ' ' || *start == '\t')
+        start++;
+    if (*start == '\0')
+    {
+        str[0] = '\0';
+        return;
+    }
+    end = start + strlen(start) - 1;
+    while (end > start && (*end == ' ' || *end == '\t'))
         *end-- = '\0';
-    return str;
+    if (start != str)
+        memmove(str, start, strlen(start) + 1);
 }
 
 int main(void)
@@ -48,7 +53,7 @@ int main(void)
         if (line[read_len - 1] == '\n')
             line[read_len - 1] = '\0';
 
-        line = trim_spaces(line);
+        trim_spaces(line);
         if (line[0] == '\0')
             continue;
 
@@ -72,6 +77,7 @@ int main(void)
         else
             wait(NULL);
     }
+
     free(line);
     return 0;
 }
