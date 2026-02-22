@@ -7,7 +7,12 @@
 
 extern char **environ;
 #define MAX_ARGS 64
-
+/**
+ * trim_spaces - Remove leading and trailing spaces and tabs
+ * @str: String to trim
+ *
+ * Return: void. Modifies the string in place.
+ */
 void trim_spaces(char *str)
 {
     char *start;
@@ -33,7 +38,13 @@ void trim_spaces(char *str)
         memmove(str, start, len + 1);
     }
 }
-
+/**
+ * get_command_path - Resolve a command using PATH environment variable
+ * @cmd: Command to resolve
+ *
+ * Return: pointer to a string representing full path if found,
+ *         or original cmd if not found or PATH empty.
+ */
 char *get_command_path(char *cmd)
 {
     char *path_env;
@@ -82,7 +93,11 @@ char *get_command_path(char *cmd)
     free(paths);
     return cmd;
 }
-
+/**
+ * main - Entry point for the shell
+ *
+ * Return: 0 on success, exits with 127 if command not found
+ */
 int main(void)
 {
     char *line;
