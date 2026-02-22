@@ -1,15 +1,14 @@
 /**
- * simple_shell.c - A minimal C90 shell that handles PATH
+ * simple_shell.c - Minimal shell that handles PATH without getenv()
  *
- * Description: Reads commands from stdin, resolves PATH, and executes
- * them. Fork is only called if the command exists. Prints errors
- * if the command is not found.
+ * Description: Reads commands from stdin, resolves PATH from environ,
+ * and executes them. Fork is only called if the command exists.
  *
  * Usage: ./simple_shell
  *
  * Exit Status:
- *   0 - success
- *   127 - command not found
+ *   0   Success
+ *   127 Command not found
  */
 
 #include <stdio.h>
@@ -53,9 +52,27 @@ void trim_spaces(char *str)
 }
 
 /**
- * get_command_path - Resolve a command using PATH
- * @cmd: Command to resolve
- *
+ * find_in_environ - Get PATH from environ manually
+ * Return: pointer to PATH string, or NULL if not found
+ */
+char *find_in_environ(void)
+{
+    int i;
+    char *s;
+
+    for (i = 0; environ[i]; i++)
+    {
+        s = environ[i];
+        if (s[0] == 'P' && s[1] == 'A' && s[2] == 'T' &&
+            s[3] == 'H' && s[4] == '=')
+            return s + 5; /* skip "PATH=" */
+    }
+    return NULL;
+}
+
+/**
+ * get_command_path - Resolve command using PATH
+ * @cmd: command name
  * Return: full path if exists, else NULL
  */
 char *get_command_path(char *cmd)
@@ -74,7 +91,7 @@ char *get_command_path(char *cmd)
         return NULL;
     }
 
-    path_env = getenv("PATH");
+    path_env = find_in_environ();
     if (!path_env || path_env[0] == '\0')
         return NULL;
 
@@ -113,7 +130,7 @@ char *get_command_path(char *cmd)
 }
 
 /**
- * main - Entry point
+ * main - entry point
  */
 int main(void)
 {
@@ -157,7 +174,7 @@ int main(void)
             argv[i] = strtok(NULL, " ");
         }
 
-        /* Resolve command */
+        /* Resolve command path */
         {
             char *cmd_path;
             cmd_path = get_command_path(argv[0]);
