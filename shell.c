@@ -71,7 +71,7 @@ int main(void)
         }
         else
             wait(NULL);
-    	free(line);
     }
+    free(line);
     return 0;
 }
