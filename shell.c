@@ -11,7 +11,6 @@ int main(void)
 	size_t len = 0;
 	ssize_t read;
 	pid_t pid;
-	int status;
 	int interactive = 0;
 	char *argv[2];
 	argv[1] = NULL;
