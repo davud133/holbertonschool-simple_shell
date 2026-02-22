@@ -25,6 +25,34 @@ void trim_spaces(char *str)
         memmove(str, start, strlen(start) + 1);
 }
 
+char *get_command_path(char *cmd)
+{
+    if (cmd[0] == '/' || cmd[0] == '.')
+        return cmd;
+
+    char *path_env = getenv("PATH");
+    if (!path_env)
+        return cmd;
+
+    char *paths = strdup(path_env);
+    char *dir = strtok(paths, ":");
+    static char full_path[1024];
+
+    while (dir)
+    {
+        snprintf(full_path, sizeof(full_path), "%s/%s", dir, cmd);
+        if (access(full_path, X_OK) == 0)
+        {
+            free(paths);
+            return full_path;
+        }
+        dir = strtok(NULL, ":");
+    }
+
+    free(paths);
+    return cmd;
+}
+
 int main(void)
 {
     char *line = NULL;
@@ -32,8 +60,6 @@ int main(void)
     ssize_t read_len;
     pid_t pid;
     int interactive;
-    char *argv[2];
-    argv[1] = NULL;
 
     while (1)
     {
@@ -66,13 +92,22 @@ int main(void)
         }
         else if (pid == 0)
         {
-            argv[0] = line;
-            if (execve(line, argv, environ) == -1)
+            char *argv[64];
+            int argc = 0;
+            char *token = strtok(line, " ");
+            while (token && argc < 63)
+            {
+                argv[argc++] = token;
+                token = strtok(NULL, " ");
+            }
+            argv[argc] = NULL;
+
+            char *cmd_path = get_command_path(argv[0]);
+            if (execve(cmd_path, argv, environ) == -1)
             {
                 write(2, "./simple_shell: No such file or directory\n", 43);
                 exit(1);
             }
-            exit(0);
         }
         else
             wait(NULL);
