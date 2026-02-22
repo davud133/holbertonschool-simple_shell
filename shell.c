@@ -4,32 +4,21 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <string.h>
-#include <ctype.h>
 
 extern char **environ;
 
 #define MAX_LINE 1024
 
-/**
- * trim_spaces - removes leading and trailing spaces from a string
- * @str: string to trim
- *
- * Return: pointer to trimmed string (same buffer)
- */
 char *trim_spaces(char *str)
 {
     char *end;
-
-    while (*str && isspace((unsigned char)*str))
+    while (*str == ' ' || *str == '\t')
         str++;
-
-    if (*str == 0)
+    if (*str == '\0')
         return str;
-
     end = str + strlen(str) - 1;
-    while (end > str && isspace((unsigned char)*end))
+    while (end > str && (*end == ' ' || *end == '\t'))
         *end-- = '\0';
-
     return str;
 }
 
@@ -37,7 +26,7 @@ int main(void)
 {
     char *line = NULL;
     size_t len = 0;
-    ssize_t read;
+    ssize_t read_len;
     pid_t pid;
     int interactive;
     char *argv[2];
@@ -49,8 +38,8 @@ int main(void)
         if (interactive)
             write(1, "$:", 2);
 
-        read = getline(&line, &len, stdin);
-        if (read == -1)
+        read_len = getline(&line, &len, stdin);
+        if (read_len == -1)
         {
             if (interactive)
                 write(1, "\n", 1);
@@ -58,10 +47,10 @@ int main(void)
             exit(0);
         }
 
-        if (line[read - 1] == '\n')
-            line[read - 1] = '\0';
-        line = trim_spaces(line);
+        if (line[read_len - 1] == '\n')
+            line[read_len - 1] = '\0';
 
+        line = trim_spaces(line);
         if (line[0] == '\0')
             continue;
 
@@ -83,9 +72,7 @@ int main(void)
             exit(0);
         }
         else
-        {
             wait(NULL);
-        }
     }
 
     free(line);
