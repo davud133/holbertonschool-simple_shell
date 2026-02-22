@@ -1,3 +1,17 @@
+/**
+ * simple_shell.c - A minimal C90 shell that handles PATH
+ *
+ * Description: Reads commands from stdin, resolves PATH, and executes
+ * them. Fork is only called if the command exists. Prints errors
+ * if the command is not found.
+ *
+ * Usage: ./simple_shell
+ *
+ * Exit Status:
+ *   0 - success
+ *   127 - command not found
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -7,11 +21,10 @@
 
 extern char **environ;
 #define MAX_ARGS 64
+
 /**
- * trim_spaces - Remove leading and trailing spaces and tabs
+ * trim_spaces - Remove leading and trailing whitespace
  * @str: String to trim
- *
- * Return: void. Modifies the string in place.
  */
 void trim_spaces(char *str)
 {
@@ -38,12 +51,12 @@ void trim_spaces(char *str)
         memmove(str, start, len + 1);
     }
 }
+
 /**
- * get_command_path - Resolve a command using PATH environment variable
+ * get_command_path - Resolve a command using PATH
  * @cmd: Command to resolve
  *
- * Return: pointer to a string representing full path if found,
- *         or original cmd if not found or PATH empty.
+ * Return: full path if exists, else NULL
  */
 char *get_command_path(char *cmd)
 {
@@ -55,15 +68,19 @@ char *get_command_path(char *cmd)
     size_t path_len;
 
     if (strchr(cmd, '/'))
-        return cmd;
+    {
+        if (access(cmd, X_OK) == 0)
+            return cmd;
+        return NULL;
+    }
 
     path_env = getenv("PATH");
     if (!path_env || path_env[0] == '\0')
-        return cmd;
+        return NULL;
 
     paths = strdup(path_env);
     if (!paths)
-        return cmd;
+        return NULL;
 
     token = strtok(paths, ":");
     while (token)
@@ -74,8 +91,9 @@ char *get_command_path(char *cmd)
         if (!cmd_path)
         {
             free(paths);
-            return cmd;
+            return NULL;
         }
+
         strcpy(cmd_path, token);
         strcat(cmd_path, "/");
         strcat(cmd_path, cmd);
@@ -91,33 +109,28 @@ char *get_command_path(char *cmd)
     }
 
     free(paths);
-    return cmd;
+    return NULL;
 }
+
 /**
- * main - Entry point for the shell
- *
- * Return: 0 on success, exits with 127 if command not found
+ * main - Entry point
  */
 int main(void)
 {
-    char *line;
-    size_t len;
+    char *line = NULL;
+    size_t len = 0;
     ssize_t read_len;
-    pid_t pid;
-    int interactive;
     char *argv[MAX_ARGS];
     int i;
+    pid_t pid;
+    int interactive;
     int status;
-    int line_number = 1;
-
-    line = NULL;
-    len = 0;
 
     while (1)
     {
         interactive = isatty(STDIN_FILENO);
         if (interactive)
-            write(1, "$:", 2);
+            write(1, ":) ", 3);
 
         read_len = getline(&line, &len, stdin);
         if (read_len == -1)
@@ -133,12 +146,9 @@ int main(void)
 
         trim_spaces(line);
         if (line[0] == '\0')
-        {
-            line_number++;
             continue;
-        }
 
-        /* Tokenize command */
+        /* Tokenize */
         i = 0;
         argv[i] = strtok(line, " ");
         while (argv[i] && i < MAX_ARGS - 1)
@@ -147,37 +157,39 @@ int main(void)
             argv[i] = strtok(NULL, " ");
         }
 
-        pid = fork();
-        if (pid < 0)
-        {
-            perror("fork");
-            free(line);
-            exit(1);
-        }
-        else if (pid == 0)
+        /* Resolve command */
         {
             char *cmd_path;
             cmd_path = get_command_path(argv[0]);
-            execve(cmd_path, argv, environ);
-
-            /* Command not found: exact message and exit 127 */
-            write(2, "./hsh: ", 7);
+            if (!cmd_path)
             {
-                char numbuf[12];
-                int n = snprintf(numbuf, sizeof(numbuf), "%d", line_number);
-                write(2, numbuf, n);
+                write(2, "./hsh: 1: ", 11);
+                write(2, argv[0], strlen(argv[0]));
+                write(2, ": not found\n", 12);
+                continue;
             }
-            write(2, ": ", 2);
-            write(2, argv[0], strlen(argv[0]));
-            write(2, ": not found\n", 12);
-            exit(127);  /* THIS IS THE KEY FIX */
-        }
-        else
-        {
-            wait(&status);
-        }
 
-        line_number++;
+            pid = fork();
+            if (pid < 0)
+            {
+                perror("fork");
+                free(line);
+                exit(1);
+            }
+            else if (pid == 0)
+            {
+                execve(cmd_path, argv, environ);
+                perror("execve");
+                exit(127);
+            }
+            else
+            {
+                wait(&status);
+            }
+
+            if (cmd_path != argv[0])
+                free(cmd_path);
+        }
     }
 
     free(line);
