@@ -1,180 +1,166 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
-#include <sys/types.h>
+#include <string.h>
 #include <sys/wait.h>
 
 /**
- * trim_spaces - remove leading and trailing spaces
- * @str: string to trim
+ * split_line - split input line into arguments
+ * @line: input line
+ * Return: NULL-terminated array of strings
  */
-void trim_spaces(char *str)
+char **split_line(char *line)
 {
-    char *start = str;
-    char *end;
+    int bufsize = 64, pos = 0;
+    char **tokens, *token;
 
-    while (*start == ' ' || *start == '\t')
-        start++;
-    if (*start == '\0')
+    tokens = malloc(sizeof(char *) * bufsize);
+    if (!tokens)
     {
-        str[0] = '\0';
-        return;
+        fprintf(stderr, "Allocation error\n");
+        exit(EXIT_FAILURE);
     }
 
-    end = start + strlen(start) - 1;
-    while (end > start && (*end == ' ' || *end == '\t'))
-        *end-- = '\0';
+    token = strtok(line, " \t\r\n");
+    while (token != NULL)
+    {
+        tokens[pos++] = token;
 
-    if (start != str)
-        memmove(str, start, strlen(start) + 1);
+        if (pos >= bufsize)
+        {
+            bufsize += 64;
+            tokens = realloc(tokens, sizeof(char *) * bufsize);
+            if (!tokens)
+            {
+                fprintf(stderr, "Allocation error\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+        token = strtok(NULL, " \t\r\n");
+    }
+    tokens[pos] = NULL;
+    return tokens;
 }
 
 /**
- * command_exists - check if a command exists in PATH or as relative/absolute
- * @cmd: command string
- * @full_path: buffer to store full path if exists
- * Return: 1 if command exists, 0 otherwise
+ * command_exists - check if command exists (absolute or relative)
+ * @cmd: command name
+ * Return: full path or NULL
  */
-int command_exists(char *cmd, char *full_path)
+char *command_exists(char *cmd)
 {
-    char *path_env = NULL;
-    char *path_dup;
-    char *token;
-    char candidate[1024];
-    int found = 0;
-    int i;
+    char *path_env, *path_dup, *dir, *fullpath;
+    char *path_sep = ":";
+    int len;
 
-    /* absolute or relative path */
-    if (cmd[0] == '/' || cmd[0] == '.')
+    /* Check if cmd contains '/' (absolute or relative) */
+    if (strchr(cmd, '/') != NULL)
     {
         if (access(cmd, X_OK) == 0)
-        {
-            strcpy(full_path, cmd);
-            return 1;
-        }
-        return 0;
+            return cmd;
+        return NULL;
     }
 
-    /* manually get PATH from environ */
-    {
-        extern char **environ;
-        for (i = 0; environ[i] != NULL; i++)
-        {
-            if (strncmp(environ[i], "PATH=", 5) == 0)
-            {
-                path_env = environ[i] + 5;
-                break;
-            }
-        }
-    }
-
+    /* Use PATH from environment */
+    path_env = getenv("PATH");
     if (!path_env || path_env[0] == '\0')
-        return 0; /* PATH empty, cannot find */
+        return NULL;
 
     path_dup = strdup(path_env);
     if (!path_dup)
-        return 0;
-
-    token = strtok(path_dup, ":");
-    while (token)
     {
-        strcpy(candidate, token);
-        strcat(candidate, "/");
-        strcat(candidate, cmd);
-        if (access(candidate, X_OK) == 0)
+        fprintf(stderr, "Allocation error\n");
+        exit(EXIT_FAILURE);
+    }
+
+    dir = strtok(path_dup, path_sep);
+    while (dir != NULL)
+    {
+        len = strlen(dir) + strlen(cmd) + 2;
+        fullpath = malloc(len);
+        if (!fullpath)
         {
-            strcpy(full_path, candidate);
-            found = 1;
-            break;
+            fprintf(stderr, "Allocation error\n");
+            exit(EXIT_FAILURE);
         }
-        token = strtok(NULL, ":");
+        snprintf(fullpath, len, "%s/%s", dir, cmd);
+        if (access(fullpath, X_OK) == 0)
+        {
+            free(path_dup);
+            return fullpath;
+        }
+        free(fullpath);
+        dir = strtok(NULL, path_sep);
     }
 
     free(path_dup);
-    return found;
+    return NULL;
 }
 
 /**
- * main - simple shell
- * Return: 0
+ * execute - execute command
+ * @args: arguments array
  */
+void execute(char **args)
+{
+    pid_t pid;
+    int status;
+    char *cmd_path;
+
+    if (args[0] == NULL)
+        return;
+
+    cmd_path = command_exists(args[0]);
+    if (!cmd_path)
+    {
+        fprintf(stderr, "./hsh: 1: %s: not found\n", args[0]);
+        return;
+    }
+
+    pid = fork();
+    if (pid == 0)
+    {
+        /* child process */
+        execve(cmd_path, args, environ);
+        /* if execve fails */
+        fprintf(stderr, "./hsh: 1: %s: not found\n", args[0]);
+        exit(127);
+    }
+    else if (pid > 0)
+    {
+        /* parent waits for child */
+        wait(&status);
+        (void)status; /* suppress unused warning */
+    }
+    else
+    {
+        perror("fork");
+    }
+}
+
 int main(void)
 {
     char *line = NULL;
     size_t len = 0;
-    ssize_t read_len;
-    pid_t pid;
-    char *argv[64];
-    int i;
-    char full_path[1024];
+    char **args;
+    ssize_t read;
 
     while (1)
     {
-        if (isatty(STDIN_FILENO))
-            write(1, "$:", 2);
+        printf(":) ");
+        fflush(stdout);
 
-        read_len = getline(&line, &len, stdin);
-        if (read_len == -1)
+        read = getline(&line, &len, stdin);
+        if (read == -1)
         {
-            if (isatty(STDIN_FILENO))
-                write(1, "\n", 1);
             free(line);
-            exit(0);
+            break;
         }
 
-        if (line[read_len - 1] == '\n')
-            line[read_len - 1] = '\0';
-
-        trim_spaces(line);
-        if (line[0] == '\0')
-            continue;
-
-        /* split command into argv */
-        argv[0] = strtok(line, " \t");
-        if (!argv[0])
-            continue;
-        for (i = 1; i < 64; i++)
-        {
-            argv[i] = strtok(NULL, " \t");
-            if (!argv[i])
-                break;
-        }
-
-        /* check command existence */
-        if (!command_exists(argv[0], full_path))
-        {
-            write(2, "./hsh: 1: ", 11);
-            write(2, argv[0], strlen(argv[0]));
-            write(2, ": not found\n", 12);
-            continue; /* do NOT fork */
-        }
-
-        pid = fork();
-        if (pid < 0)
-        {
-            write(2, "Fork failed\n", 12);
-            continue;
-        }
-        else if (pid == 0)
-        {
-            execve(full_path, argv, NULL);
-            /* execve failed */
-            write(2, "./hsh: 1: ", 11);
-            write(2, argv[0], strlen(argv[0]));
-            write(2, ": not found\n", 12);
-            exit(127);
-        }
-        else
-        {
-            int status;
-            wait(&status);
-            /* propagate 127 if child exec failed */
-            if (WIFEXITED(status) && WEXITSTATUS(status) == 127)
-                ; /* nothing to do, child handled exit */
-        }
+        args = split_line(line);
+        execute(args);
+        free(args);
     }
 
-    free(line);
     return 0;
 }
