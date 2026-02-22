@@ -27,16 +27,20 @@ void trim_spaces(char *str)
 
 char *get_command_path(char *cmd)
 {
+    char *path_env;
+    char *paths;
+    char *dir;
+    static char full_path[1024];
+
     if (cmd[0] == '/' || cmd[0] == '.')
         return cmd;
 
-    char *path_env = getenv("PATH");
+    path_env = getenv("PATH");
     if (!path_env)
         return cmd;
 
-    char *paths = strdup(path_env);
-    char *dir = strtok(paths, ":");
-    static char full_path[1024];
+    paths = strdup(path_env);
+    dir = strtok(paths, ":");
 
     while (dir)
     {
@@ -60,6 +64,10 @@ int main(void)
     ssize_t read_len;
     pid_t pid;
     int interactive;
+    char *argv[64];
+    int argc;
+    char *token;
+    char *cmd_path;
 
     while (1)
     {
@@ -92,9 +100,8 @@ int main(void)
         }
         else if (pid == 0)
         {
-            char *argv[64];
-            int argc = 0;
-            char *token = strtok(line, " ");
+            argc = 0;
+            token = strtok(line, " ");
             while (token && argc < 63)
             {
                 argv[argc++] = token;
@@ -102,7 +109,7 @@ int main(void)
             }
             argv[argc] = NULL;
 
-            char *cmd_path = get_command_path(argv[0]);
+            cmd_path = get_command_path(argv[0]);
             if (execve(cmd_path, argv, environ) == -1)
             {
                 write(2, "./simple_shell: No such file or directory\n", 43);
