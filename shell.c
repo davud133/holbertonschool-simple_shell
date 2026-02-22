@@ -4,6 +4,8 @@
 #include <string.h>
 #include <sys/wait.h>
 
+extern char **environ; /* needed for execve() */
+
 /**
  * split_line - split input line into arguments
  * @line: input line
@@ -53,7 +55,6 @@ char *command_exists(char *cmd)
     char *path_sep = ":";
     int len;
 
-    /* Check if cmd contains '/' (absolute or relative) */
     if (strchr(cmd, '/') != NULL)
     {
         if (access(cmd, X_OK) == 0)
@@ -61,7 +62,6 @@ char *command_exists(char *cmd)
         return NULL;
     }
 
-    /* Use PATH from environment */
     path_env = getenv("PATH");
     if (!path_env || path_env[0] == '\0')
         return NULL;
@@ -120,17 +120,14 @@ void execute(char **args)
     pid = fork();
     if (pid == 0)
     {
-        /* child process */
         execve(cmd_path, args, environ);
-        /* if execve fails */
         fprintf(stderr, "./hsh: 1: %s: not found\n", args[0]);
         exit(127);
     }
     else if (pid > 0)
     {
-        /* parent waits for child */
         wait(&status);
-        (void)status; /* suppress unused warning */
+        (void)status;
     }
     else
     {
