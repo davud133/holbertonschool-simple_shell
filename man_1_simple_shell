@@ -1,0 +1,47 @@
+```roff
+.TH HSH 1 "February 2026" "Simple Shell" "User Commands"
+
+.SH NAME
+hsh \- simple UNIX command interpreter
+
+.SH SYNOPSIS
+.B hsh
+
+.SH DESCRIPTION
+hsh is a simple UNIX command language interpreter that executes commands read from the standard input.
+
+The shell displays a prompt, reads a command line, parses it into tokens, and executes the command using fork and execve.
+
+The shell works in both interactive and non-interactive modes.
+
+.SH BUILTIN COMMANDS
+.TP
+.B exit
+Exit the shell.
+.TP
+.B env
+Print the current environment.
+
+.SH HOW IT WORKS
+The shell performs the following steps:
+1. Displays a prompt.
+2. Reads input using getline.
+3. Parses input into arguments.
+4. Searches for the executable in PATH.
+5. Creates a child process using fork.
+6. Executes the command using execve.
+7. Waits for the child process to terminate.
+
+.SH RETURN VALUE
+hsh returns 0 on success.
+
+.SH AUTHORS
+See AUTHORS file.
+
+.SH BUGS
+No known bugs.
+
+.SH EXAMPLE
+$ hsh
+$ ls -l
+$ exit
