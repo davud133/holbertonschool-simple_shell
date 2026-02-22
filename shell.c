@@ -20,14 +20,12 @@ char *trim_spaces(char *str)
 {
     char *end;
 
-    // Trim leading spaces
     while (*str && isspace((unsigned char)*str))
         str++;
 
-    if (*str == 0) // All spaces
+    if (*str == 0)
         return str;
 
-    // Trim trailing spaces
     end = str + strlen(str) - 1;
     while (end > str && isspace((unsigned char)*end))
         *end-- = '\0';
@@ -42,7 +40,7 @@ int main(void)
     ssize_t read;
     pid_t pid;
     int interactive;
-    char *argv[2]; // only argv[0] is needed
+    char *argv[2];
     argv[1] = NULL;
 
     while (1)
@@ -60,12 +58,11 @@ int main(void)
             exit(0);
         }
 
-        // Remove newline and trim spaces
         if (line[read - 1] == '\n')
             line[read - 1] = '\0';
         line = trim_spaces(line);
 
-        if (line[0] == '\0') // skip empty lines
+        if (line[0] == '\0')
             continue;
 
         pid = fork();
@@ -75,7 +72,7 @@ int main(void)
             free(line);
             exit(1);
         }
-        else if (pid == 0) // child
+        else if (pid == 0)
         {
             argv[0] = line;
             if (execve(line, argv, environ) == -1)
@@ -83,9 +80,9 @@ int main(void)
                 write(2, "./simple_shell: No such file or directory\n", 43);
                 exit(1);
             }
-            exit(0); // never reached if execve succeeds
+            exit(0);
         }
-        else // parent
+        else
         {
             wait(NULL);
         }
