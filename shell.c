@@ -27,12 +27,14 @@ void trim_spaces(char *str)
 
 int main(void)
 {
-    char *line = NULL;
-    size_t len = 0;
-    ssize_t read_len;
-    int interactive;
-    pid_t pid;
-
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t read_len;
+	int interactive;
+	pid_t pid;
+	char *argv[64];
+	int argc = 0;
+	char *token = strtok(line, " ");
     while (1)
     {
         interactive = isatty(STDIN_FILENO);
@@ -55,9 +57,6 @@ int main(void)
         if (line[0] == '\0')
             continue;
 
-        char *argv[64];
-        int argc = 0;
-        char *token = strtok(line, " ");
         while (token != NULL && argc < 63)
         {
             argv[argc++] = token;
