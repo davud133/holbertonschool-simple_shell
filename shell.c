@@ -1,16 +1,3 @@
-/**
- * simple_shell.c - Minimal shell that handles PATH without getenv()
- *
- * Description: Reads commands from stdin, resolves PATH from environ,
- * and executes them. Fork is only called if the command exists.
- *
- * Usage: ./simple_shell
- *
- * Exit Status:
- *   0   Success
- *   127 Command not found
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -18,20 +5,20 @@
 #include <sys/wait.h>
 #include <string.h>
 
-extern char **environ;
+/* Maximum command line length */
+#define MAX_LINE 1024
 #define MAX_ARGS 64
 
+extern char **environ;
+
 /**
- * trim_spaces - Remove leading and trailing whitespace
- * @str: String to trim
+ * trim_spaces - remove leading/trailing whitespace from a string
+ * @str: string to trim
  */
 void trim_spaces(char *str)
 {
-    char *start;
+    char *start = str;
     char *end;
-    size_t len;
-
-    start = str;
     while (*start == ' ' || *start == '\t')
         start++;
     if (*start == '\0')
@@ -39,98 +26,103 @@ void trim_spaces(char *str)
         str[0] = '\0';
         return;
     }
-
     end = start + strlen(start) - 1;
     while (end > start && (*end == ' ' || *end == '\t'))
         *end-- = '\0';
-
     if (start != str)
-    {
-        len = strlen(start);
-        memmove(str, start, len + 1);
-    }
+        memmove(str, start, strlen(start) + 1);
 }
 
 /**
- * find_in_environ - Get PATH from environ manually
- * Return: pointer to PATH string, or NULL if not found
+ * parse_args - split a line into arguments
+ * @line: input line
+ * @argv: output array of argument strings
+ * Return: number of arguments
  */
-char *find_in_environ(void)
+int parse_args(char *line, char **argv)
 {
-    int i;
-    char *s;
-
-    for (i = 0; environ[i]; i++)
+    int argc = 0;
+    char *token = strtok(line, " \t");
+    while (token != NULL && argc < (MAX_ARGS - 1))
     {
-        s = environ[i];
-        if (s[0] == 'P' && s[1] == 'A' && s[2] == 'T' &&
-            s[3] == 'H' && s[4] == '=')
-            return s + 5; /* skip "PATH=" */
+        argv[argc++] = token;
+        token = strtok(NULL, " \t");
     }
-    return NULL;
+    argv[argc] = NULL;
+    return argc;
 }
 
 /**
- * get_command_path - Resolve command using PATH
+ * is_executable - check if a file exists and is executable
+ * @path: file path
+ * Return: 1 if executable, 0 otherwise
+ */
+int is_executable(char *path)
+{
+    return access(path, X_OK) == 0;
+}
+
+/**
+ * find_command_in_path - search PATH for command
  * @cmd: command name
- * Return: full path if exists, else NULL
+ * Return: full path (malloc'd) or NULL if not found
  */
-char *get_command_path(char *cmd)
+char *find_command_in_path(char *cmd)
 {
-    char *path_env;
-    char *paths;
-    char *token;
-    char *cmd_path;
-    size_t cmd_len;
-    size_t path_len;
+    char *path_env = NULL;
+    char *paths = NULL;
+    char *dir = NULL;
+    char *full_path = NULL;
+    int i;
 
-    if (strchr(cmd, '/'))
+    /* Look for PATH in environ manually (no getenv) */
+    for (i = 0; environ[i] != NULL; i++)
     {
-        if (access(cmd, X_OK) == 0)
-            return cmd;
-        return NULL;
+        if (strncmp(environ[i], "PATH=", 5) == 0)
+        {
+            path_env = environ[i] + 5;
+            break;
+        }
     }
 
-    path_env = find_in_environ();
+    /* If PATH is empty, return NULL */
     if (!path_env || path_env[0] == '\0')
         return NULL;
 
+    /* Duplicate PATH to modify it */
     paths = strdup(path_env);
     if (!paths)
         return NULL;
 
-    token = strtok(paths, ":");
-    while (token)
+    dir = strtok(paths, ":");
+    while (dir != NULL)
     {
-        cmd_len = strlen(cmd);
-        path_len = strlen(token);
-        cmd_path = malloc(cmd_len + path_len + 2);
-        if (!cmd_path)
+        full_path = malloc(strlen(dir) + 1 + strlen(cmd) + 1);
+        if (!full_path)
         {
             free(paths);
             return NULL;
         }
-
-        strcpy(cmd_path, token);
-        strcat(cmd_path, "/");
-        strcat(cmd_path, cmd);
-
-        if (access(cmd_path, X_OK) == 0)
+        strcpy(full_path, dir);
+        strcat(full_path, "/");
+        strcat(full_path, cmd);
+        if (is_executable(full_path))
         {
             free(paths);
-            return cmd_path;
+            return full_path; /* Found executable */
         }
-
-        free(cmd_path);
-        token = strtok(NULL, ":");
+        free(full_path);
+        full_path = NULL;
+        dir = strtok(NULL, ":");
     }
 
     free(paths);
-    return NULL;
+    return NULL; /* Not found */
 }
 
 /**
- * main - entry point
+ * main - simple shell
+ * Return: 0 on exit
  */
 int main(void)
 {
@@ -138,24 +130,23 @@ int main(void)
     size_t len = 0;
     ssize_t read_len;
     char *argv[MAX_ARGS];
-    int i;
     pid_t pid;
     int interactive;
-    int status;
+    int status = 0;
+    char *cmd_path;
 
     while (1)
     {
         interactive = isatty(STDIN_FILENO);
         if (interactive)
-            write(1, ":) ", 3);
+            write(1, "$:", 2);
 
         read_len = getline(&line, &len, stdin);
         if (read_len == -1)
         {
             if (interactive)
                 write(1, "\n", 1);
-            free(line);
-            exit(0);
+            break;
         }
 
         if (line[read_len - 1] == '\n')
@@ -165,50 +156,56 @@ int main(void)
         if (line[0] == '\0')
             continue;
 
-        /* Tokenize */
-        i = 0;
-        argv[i] = strtok(line, " ");
-        while (argv[i] && i < MAX_ARGS - 1)
-        {
-            i++;
-            argv[i] = strtok(NULL, " ");
-        }
+        parse_args(line, argv);
 
-        /* Resolve command path */
+        /* Check if command exists */
+        if (strchr(argv[0], '/'))
         {
-            char *cmd_path;
-            cmd_path = get_command_path(argv[0]);
+            cmd_path = argv[0];
+            if (!is_executable(cmd_path))
+            {
+                write(2, "./hsh: 1: ", 11);
+                write(2, argv[0], strlen(argv[0]));
+                write(2, ": not found\n", 12);
+                status = 127;
+                continue;
+            }
+        }
+        else
+        {
+            cmd_path = find_command_in_path(argv[0]);
             if (!cmd_path)
             {
                 write(2, "./hsh: 1: ", 11);
                 write(2, argv[0], strlen(argv[0]));
                 write(2, ": not found\n", 12);
+                status = 127;
                 continue;
             }
-
-            pid = fork();
-            if (pid < 0)
-            {
-                perror("fork");
-                free(line);
-                exit(1);
-            }
-            else if (pid == 0)
-            {
-                execve(cmd_path, argv, environ);
-                perror("execve");
-                exit(127);
-            }
-            else
-            {
-                wait(&status);
-            }
-
-            if (cmd_path != argv[0])
-                free(cmd_path);
         }
+
+        pid = fork();
+        if (pid < 0)
+        {
+            perror("fork");
+            free(line);
+            exit(1);
+        }
+        else if (pid == 0)
+        {
+            execve(cmd_path, argv, environ);
+            write(2, "./hsh: 1: ", 11);
+            write(2, argv[0], strlen(argv[0]));
+            write(2, ": not found\n", 12);
+            exit(127);
+        }
+        else
+            wait(&status);
+
+        if (!strchr(argv[0], '/'))
+            free(cmd_path);
     }
 
     free(line);
-    return 0;
+    return status;
 }
