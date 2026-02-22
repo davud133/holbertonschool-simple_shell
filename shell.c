@@ -13,6 +13,7 @@ void trim_spaces(char *str)
 {
     char *start = str;
     char *end;
+
     while (*start == ' ' || *start == '\t')
         start++;
     if (*start == '\0')
@@ -20,28 +21,31 @@ void trim_spaces(char *str)
         str[0] = '\0';
         return;
     }
+
     end = start + strlen(start) - 1;
     while (end > start && (*end == ' ' || *end == '\t'))
         *end-- = '\0';
+
     if (start != str)
         memmove(str, start, strlen(start) + 1);
 }
 
 /**
- * command_exists - check if command exists in PATH
- * @cmd: command name
- * @full_path: output buffer for full path
- * Return: 1 if exists, 0 otherwise
+ * command_exists - check if a command exists in PATH or as relative/absolute
+ * @cmd: command string
+ * @full_path: buffer to store full path if exists
+ * Return: 1 if command exists, 0 otherwise
  */
 int command_exists(char *cmd, char *full_path)
 {
-    char *path_env;
+    char *path_env = NULL;
     char *path_dup;
     char *token;
     char candidate[1024];
     int found = 0;
+    int i;
 
-    /* check absolute or relative path first */
+    /* absolute or relative path */
     if (cmd[0] == '/' || cmd[0] == '.')
     {
         if (access(cmd, X_OK) == 0)
@@ -52,11 +56,9 @@ int command_exists(char *cmd, char *full_path)
         return 0;
     }
 
-    /* get PATH from environment manually */
-    path_env = NULL;
+    /* manually get PATH from environ */
     {
         extern char **environ;
-        int i;
         for (i = 0; environ[i] != NULL; i++)
         {
             if (strncmp(environ[i], "PATH=", 5) == 0)
@@ -68,7 +70,7 @@ int command_exists(char *cmd, char *full_path)
     }
 
     if (!path_env || path_env[0] == '\0')
-        return 0; /* PATH empty, cannot find command */
+        return 0; /* PATH empty, cannot find */
 
     path_dup = strdup(path_env);
     if (!path_dup)
@@ -88,6 +90,7 @@ int command_exists(char *cmd, char *full_path)
         }
         token = strtok(NULL, ":");
     }
+
     free(path_dup);
     return found;
 }
@@ -138,12 +141,13 @@ int main(void)
                 break;
         }
 
+        /* check command existence */
         if (!command_exists(argv[0], full_path))
         {
             write(2, "./hsh: 1: ", 11);
             write(2, argv[0], strlen(argv[0]));
             write(2, ": not found\n", 12);
-            continue;
+            continue; /* do NOT fork */
         }
 
         pid = fork();
@@ -155,7 +159,7 @@ int main(void)
         else if (pid == 0)
         {
             execve(full_path, argv, NULL);
-            /* If execve fails */
+            /* execve failed */
             write(2, "./hsh: 1: ", 11);
             write(2, argv[0], strlen(argv[0]));
             write(2, ": not found\n", 12);
@@ -163,7 +167,11 @@ int main(void)
         }
         else
         {
-            wait(NULL);
+            int status;
+            wait(&status);
+            /* propagate 127 if child exec failed */
+            if (WIFEXITED(status) && WEXITSTATUS(status) == 127)
+                ; /* nothing to do, child handled exit */
         }
     }
 
