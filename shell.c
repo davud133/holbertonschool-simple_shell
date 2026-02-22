@@ -7,8 +7,6 @@
 
 extern char **environ;
 
-#define MAX_LINE 1024
-
 char *trim_spaces(char *str)
 {
     char *end;
