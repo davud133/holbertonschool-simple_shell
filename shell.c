@@ -27,14 +27,14 @@ void trim_spaces(char *str)
 
 int main(void)
 {
-	char *line = NULL;
-	size_t len = 0;
-	ssize_t read_len;
-	int interactive;
-	pid_t pid;
-	char *argv[64];
-	int argc = 0;
-	char *token = strtok(line, " ");
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t read_len;
+    pid_t pid;
+    int interactive;
+    char *argv[2];
+    argv[1] = NULL;
+
     while (1)
     {
         interactive = isatty(STDIN_FILENO);
@@ -57,13 +57,6 @@ int main(void)
         if (line[0] == '\0')
             continue;
 
-        while (token != NULL && argc < 63)
-        {
-            argv[argc++] = token;
-            token = strtok(NULL, " ");
-        }
-        argv[argc] = NULL;
-
         pid = fork();
         if (pid < 0)
         {
@@ -73,11 +66,13 @@ int main(void)
         }
         else if (pid == 0)
         {
-            if (execve(argv[0], argv, environ) == -1)
+            argv[0] = line;
+            if (execve(line, argv, environ) == -1)
             {
                 write(2, "./simple_shell: No such file or directory\n", 43);
                 exit(1);
             }
+            exit(0);
         }
         else
             wait(NULL);
