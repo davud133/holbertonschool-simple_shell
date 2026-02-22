@@ -6,10 +6,8 @@
 #include <string.h>
 
 extern char **environ;
-
 #define MAX_ARGS 64
 
-/* Trim leading and trailing spaces/tabs */
 void trim_spaces(char *str)
 {
     char *start;
@@ -19,7 +17,6 @@ void trim_spaces(char *str)
     start = str;
     while (*start == ' ' || *start == '\t')
         start++;
-
     if (*start == '\0')
     {
         str[0] = '\0';
@@ -37,7 +34,6 @@ void trim_spaces(char *str)
     }
 }
 
-/* Search command in PATH */
 char *get_command_path(char *cmd)
 {
     char *path_env;
@@ -47,11 +43,11 @@ char *get_command_path(char *cmd)
     size_t cmd_len;
     size_t path_len;
 
-    if (strchr(cmd, '/')) /* If command contains /, try as is */
+    if (strchr(cmd, '/'))
         return cmd;
 
     path_env = getenv("PATH");
-    if (!path_env || path_env[0] == '\0') /* Empty PATH */
+    if (!path_env || path_env[0] == '\0')
         return cmd;
 
     paths = strdup(path_env);
@@ -76,7 +72,7 @@ char *get_command_path(char *cmd)
         if (access(cmd_path, X_OK) == 0)
         {
             free(paths);
-            return cmd_path; /* Found executable */
+            return cmd_path;
         }
 
         free(cmd_path);
@@ -84,7 +80,7 @@ char *get_command_path(char *cmd)
     }
 
     free(paths);
-    return cmd; /* Not found */
+    return cmd;
 }
 
 int main(void)
@@ -127,7 +123,7 @@ int main(void)
             continue;
         }
 
-        /* Split line into argv */
+        /* Tokenize command */
         i = 0;
         argv[i] = strtok(line, " ");
         while (argv[i] && i < MAX_ARGS - 1)
@@ -143,14 +139,13 @@ int main(void)
             free(line);
             exit(1);
         }
-        else if (pid == 0) /* Child */
+        else if (pid == 0)
         {
             char *cmd_path;
-
             cmd_path = get_command_path(argv[0]);
             execve(cmd_path, argv, environ);
 
-            /* Command not found: exact message */
+            /* Command not found: exact message and exit 127 */
             write(2, "./hsh: ", 7);
             {
                 char numbuf[12];
@@ -160,9 +155,9 @@ int main(void)
             write(2, ": ", 2);
             write(2, argv[0], strlen(argv[0]));
             write(2, ": not found\n", 12);
-            exit(127); /* MUST return 127 for command not found */
+            exit(127);  /* THIS IS THE KEY FIX */
         }
-        else /* Parent */
+        else
         {
             wait(&status);
         }
